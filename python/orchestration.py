@@ -34,14 +34,25 @@ def run_sql_script(cursor, conn, file_path):
 
     conn.commit()
 
-def raw_table_exists(cursor):
+def raw_tables_exist(cursor):
+    expected_raw_tables = [
+        'air_quality_categories',
+        'cities',
+        'city_air_quality',
+        'climate_zones',
+        'continents',
+        'countries',
+        'time_zones',
+        'GlobalWeatherRepository'
+    ]
     cursor.execute("""
-        SELECT COUNT(*) 
-        FROM INFORMATION_SCHEMA.TABLES 
-        WHERE TABLE_SCHEMA = 'dwh_raw' 
-          AND TABLE_NAME = 'air_quality_categories'
+        SELECT TABLE_NAME
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_SCHEMA = 'dwh_raw'
     """)
-    return cursor.fetchone()[0] == 1
+    existing_tables = {row[0] for row in cursor.fetchall()}
+    return all(table in existing_tables for table in expected_raw_tables)
+
 
 def main():
     try:
@@ -52,12 +63,13 @@ def main():
         run_sql_script(cursor, conn, LOAD_STG_SQL)
         print("Staging layer loaded.")
 
-        if not raw_table_exists(cursor):
-            print("Raw tables empty or do not exist. Running initial full load on raw...")
+        if not raw_tables_exist(cursor):
+            print("One or more raw tables missing. Running full raw load...")
             run_sql_script(cursor, conn, LOAD_RAW_FULL_SQL)
         else:
-            print("Raw tables exist. Running incremental load on raw...")
+            print("All raw tables exist. Running incremental load...")
             run_sql_script(cursor, conn, LOAD_RAW_INCR_SQL)
+
 
         print("Loading star schema...")
         run_sql_script(cursor, conn, LOAD_STAR_SQL)
